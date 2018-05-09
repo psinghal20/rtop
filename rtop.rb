@@ -26,6 +26,16 @@ def reg_matcher(regex, string)
   regex.match(string)[0].split[1]
 end
 
+def load_average
+  file = File.new('/proc/loadavg').read.split
+  print "Load Average:\t"
+  file.each_with_index do |data, index|
+    printf '%5s', data
+    break if index == 2
+  end
+  puts
+end
+
 # To-do: User list utility for mapping uid, gid to user
 
 def processes
@@ -45,3 +55,4 @@ end
 memory
 uptime
 processes
+load_average
