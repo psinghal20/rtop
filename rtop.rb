@@ -65,29 +65,37 @@ def processes
   end
 end
 
-def cpu_usage_to_percentages(usage)
+def cpu_usage_to_percentages(old_usage, new_usage)
+  val_array = %w[us ni sy id wa hi si st]
+  usage = new_usage.zip(old_usage).map do |new_usg, old_usg|
+    new_usg.to_i - old_usg.to_i
+  end
   cpu_tot = usage.map!(&:to_f).reduce(0, :+)
   usage.map! do |usg|
     ((usg / cpu_tot) * 100).round 2
   end
-end
-
-# def cpu_refresh
-# end
-
-def cpu_usage
-  val_array = %w[us ni sy id wa hi si st]
-  file = File.new('/proc/stat')
-  usage = file.first.split[1, 8]
-  usage = cpu_usage_to_percentages usage
-  temp = "CPU Usage%: \t"
+  output = "CPU Usage%:\t"
   usage.zip(val_array).each do |usg, des|
-    temp += "#{'%8s' % usg}#{'%3s' % des}"
+    output += "#{'%8s' % usg}#{'%3s' % des}"
   end
   Curses.setpos(4, 0)
-  Curses.addstr(temp)
+  Curses.addstr(output)
   Curses.refresh
-  sleep(5)
+end
+
+def cpu_stat_read
+  file = File.new('/proc/stat')
+  file.first.split[1, 8]
+end
+
+def cpu_usage
+  old_usage = [0, 0, 0, 0, 0, 0, 0, 0]
+  loop do
+    new_usage = cpu_stat_read
+    cpu_usage_to_percentages old_usage, new_usage
+    old_usage = new_usage
+    sleep 2
+  end
 end
 
 mem = Thread.new do
@@ -110,8 +118,9 @@ load_avg = Thread.new do
     sleep 1
   end
 end
-cpu_usage
+cpu_usg = Thread.new { cpu_usage }
 mem.join
 up.join
 load_avg.join
+cpu_usg.join
 Curses.close_screen
