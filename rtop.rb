@@ -2,7 +2,7 @@ require 'curses'
 
 Curses.noecho
 Curses.init_screen
-
+Curses.curs_set 0
 def memory
   file = File.new('/proc/meminfo')
   meminfo_regex = /(MemTotal.*)|(Active:.*)|(SwapTotal.*)|(SwapFree.*)/
@@ -49,17 +49,35 @@ def load_average
   Curses.refresh
 end
 
-def processes
-  printf '%15s%15s%15s%15s%15s', 'Name', 'state', 'Pid', 'Uid', 'Gid'
-  process_regex = [/Name.*/, /State:.*/, /Pid:.*/, /Uid:.*/, /Gid:.*/]
-  Dir.each_child('/proc') do |dir|
-    if /^[0-9]*$/ =~ dir
-      content = File.new("/proc/#{dir}/status").read
-      process_regex.each do |regex|
-        printf '%15s', reg_matcher(regex, content)
-      end
-    end
+def parse_process_status(dir)
+  content = File.new("/proc/#{dir}/status").read
+  regex_list = { name: /Name.*/, state: /State:.*/, pid: /Pid:.*/,
+                 uid: /Uid:.*/, gid: /Gid:.*/, threads: /Threads:.*/ }
+  process = {}
+  regex_list.each do |key, value|
+    process[key] = value.match(content)[0].split[1]
   end
+  process
+end
+
+def gen_process_list
+  processes = []
+  Dir.each_child('/proc') do |dir|
+    processes << parse_process_status(dir) if /^[0-9]*$/ =~ dir
+  end
+  tasks_stats processes
+end
+
+def tasks_stats(processes)
+  tot_count = processes.length
+  running_count = processes.count { |proc| proc[:state] == 'R' }
+  sleeping_count = processes.count { |proc| proc[:state] == 'S' }
+  stopped_count = processes.count { |proc| proc[:state] == 'T' }
+  zombie_count = processes.count { |proc| proc[:state] == 'Z' }
+  output = "Tasks: #{tot_count} total,  #{running_count} running, #{sleeping_count} sleeping, #{stopped_count} stopped, #{zombie_count} zombie"
+  Curses.setpos(5, 0)
+  Curses.addstr(output)
+  Curses.refresh
 end
 
 def cpu_usage_to_percentages(old_usage, new_usage)
@@ -124,14 +142,23 @@ threads << Thread.new do
     sleep 1
   end
 end
-# processes
+
 threads << Thread.new do
   loop do
     load_average
     sleep 1
   end
 end
+
 threads << Thread.new { cpu_usage }
+
+threads << Thread.new do
+  loop do
+    gen_process_list
+    sleep 1
+  end
+end
+
 threads << Thread.new do
   loop do
     key_press_detection threads
