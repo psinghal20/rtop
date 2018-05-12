@@ -49,15 +49,12 @@ def load_average
   Curses.refresh
 end
 
-# To-do: User list utility for mapping uid, gid to user
-
 def processes
   printf '%15s%15s%15s%15s%15s', 'Name', 'state', 'Pid', 'Uid', 'Gid'
   process_regex = [/Name.*/, /State:.*/, /Pid:.*/, /Uid:.*/, /Gid:.*/]
   Dir.each_child('/proc') do |dir|
     if /^[0-9]*$/ =~ dir
       content = File.new("/proc/#{dir}/status").read
-      puts
       process_regex.each do |regex|
         printf '%15s', reg_matcher(regex, content)
       end
@@ -98,29 +95,47 @@ def cpu_usage
   end
 end
 
-mem = Thread.new do
+def let_it_burn(threads)
+  Curses.setpos(50, 50)
+  Curses.addstr('Burning it ALL!')
+  Curses.refresh
+  threads.each do |t|
+    Thread.kill t
+  end
+  Curses.close_screen
+end
+
+def key_press_detection(threads)
+  check = Curses.getch
+  let_it_burn threads if check == 'q'
+end
+
+threads = []
+threads << Thread.new do
   loop do
     memory
     sleep 1
   end
 end
 
-up = Thread.new do
+threads << Thread.new do
   loop do
     uptime
     sleep 1
   end
 end
 # processes
-load_avg = Thread.new do
+threads << Thread.new do
   loop do
     load_average
     sleep 1
   end
 end
-cpu_usg = Thread.new { cpu_usage }
-mem.join
-up.join
-load_avg.join
-cpu_usg.join
-Curses.close_screen
+threads << Thread.new { cpu_usage }
+threads << Thread.new do
+  loop do
+    key_press_detection threads
+    sleep 1
+  end
+end
+threads.each(&:join)
