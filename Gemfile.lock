@@ -1,0 +1,12 @@
+GEM
+  specs:
+    curses (1.2.4)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  curses
+
+BUNDLED WITH
+   1.16.1
