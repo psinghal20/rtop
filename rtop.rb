@@ -1,10 +1,18 @@
+require 'curses'
+
+Curses.noecho
+Curses.init_screen
+
 def memory
   file = File.new('/proc/meminfo')
   meminfo_regex = /(MemTotal.*)|(Active:.*)|(SwapTotal.*)|(SwapFree.*)/
-  puts 'Memory Usage'
+  output = "Memory Usage\t"
   file.each_line do |line|
-    puts meminfo_regex.match(line) if meminfo_regex.match(line)
+    output += "#{meminfo_regex.match(line)[0]}\t" if meminfo_regex.match(line)
   end
+  Curses.setpos(1, 0)
+  Curses.addstr(output)
+  Curses.refresh
 end
 
 def sec_to_days(time)
@@ -19,7 +27,10 @@ end
 
 def uptime
   file = File.new('/proc/uptime')
-  puts "Uptime: #{sec_to_days(/([^\s]+)/.match(file.read)[0].to_i)}"
+  output = "Uptime: #{sec_to_days(/([^\s]+)/.match(file.read)[0].to_i)}"
+  Curses.setpos(2, 0)
+  Curses.addstr(output)
+  Curses.refresh
 end
 
 def reg_matcher(regex, string)
@@ -28,12 +39,14 @@ end
 
 def load_average
   file = File.new('/proc/loadavg').read.split
-  print "Load Average:\t"
+  output = "Load Average:\t"
   file.each_with_index do |data, index|
-    printf '%5s', data
+    output += '%5s' % data
     break if index == 2
   end
-  puts
+  Curses.setpos(2, 65)
+  Curses.addstr(output)
+  Curses.refresh
 end
 
 # To-do: User list utility for mapping uid, gid to user
@@ -52,7 +65,53 @@ def processes
   end
 end
 
-memory
-uptime
-processes
-load_average
+def cpu_usage_to_percentages(usage)
+  cpu_tot = usage.map!(&:to_f).reduce(0, :+)
+  usage.map! do |usg|
+    ((usg / cpu_tot) * 100).round 2
+  end
+end
+
+# def cpu_refresh
+# end
+
+def cpu_usage
+  val_array = %w[us ni sy id wa hi si st]
+  file = File.new('/proc/stat')
+  usage = file.first.split[1, 8]
+  usage = cpu_usage_to_percentages usage
+  temp = "CPU Usage%: \t"
+  usage.zip(val_array).each do |usg, des|
+    temp += "#{'%8s' % usg}#{'%3s' % des}"
+  end
+  Curses.setpos(4, 0)
+  Curses.addstr(temp)
+  Curses.refresh
+  sleep(5)
+end
+
+mem = Thread.new do
+  loop do
+    memory
+    sleep 1
+  end
+end
+
+up = Thread.new do
+  loop do
+    uptime
+    sleep 1
+  end
+end
+# processes
+load_avg = Thread.new do
+  loop do
+    load_average
+    sleep 1
+  end
+end
+cpu_usage
+mem.join
+up.join
+load_avg.join
+Curses.close_screen
