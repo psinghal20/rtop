@@ -3,16 +3,30 @@ require 'curses'
 Curses.noecho
 Curses.init_screen
 Curses.curs_set 0
+
+def bold_text(x, y, string)
+  Curses.setpos(x, y)
+  Curses.attron(Curses::A_BOLD){
+    Curses.addstr(string)
+  } 
+  Curses.refresh
+end
+
+def print_text(x, y, string)
+  Curses.setpos(x, y)
+  Curses.addstr(string)
+  Curses.refresh
+end
+
 def memory
   file = File.new('/proc/meminfo')
   meminfo_regex = /(MemTotal.*)|(Active:.*)|(SwapTotal.*)|(SwapFree.*)/
-  output = "Memory Usage\t"
+  bold_text 1, 0, "Memory Usage\t"
+  output = ''
   file.each_line do |line|
     output += "#{meminfo_regex.match(line)[0]}\t" if meminfo_regex.match(line)
   end
-  Curses.setpos(1, 0)
-  Curses.addstr(output)
-  Curses.refresh
+  print_text 1, 15, output
 end
 
 def sec_to_days(time)
@@ -27,10 +41,9 @@ end
 
 def uptime
   file = File.new('/proc/uptime')
-  output = "Uptime: #{sec_to_days(/([^\s]+)/.match(file.read)[0].to_i)}"
-  Curses.setpos(2, 0)
-  Curses.addstr(output)
-  Curses.refresh
+  bold_text 2, 0, "Uptime:"
+  output = sec_to_days(/([^\s]+)/.match(file.read)[0].to_i).to_s
+  print_text 2, 10, output
 end
 
 def reg_matcher(regex, string)
@@ -39,14 +52,13 @@ end
 
 def load_average
   file = File.new('/proc/loadavg').read.split
-  output = "Load Average:\t"
+  bold_text 2, 65, "Load Average:\t"
+  output = ''
   file.each_with_index do |data, index|
     output += '%5s' % data
     break if index == 2
   end
-  Curses.setpos(2, 65)
-  Curses.addstr(output)
-  Curses.refresh
+  print_text 2, 80, output
 end
 
 def parse_process_status(dir)
@@ -66,6 +78,31 @@ def gen_process_list
     processes << parse_process_status(dir) if /^[0-9]*$/ =~ dir
   end
   tasks_stats processes
+  # process_list processes
+end
+
+def user_list
+  users = []
+  file = File.new('/etc/passwd')
+  file.each_line do |line|
+    usr = line.split(':')
+    users << { name: usr[0], uid: usr[2], gid: usr[3] }
+  end
+  users
+end
+
+def process_list(processes)
+  process_header = '%8s%8s%8s%8s%8s' % %w[PID Name UID GID State]
+  Curses.setpos(7, 0)
+  Curses.addstr(process_header)
+  index = 8
+  processes.each do |proc|
+    output = '%8s%8s%8s%8s%8s' % [proc[:pid], proc[:name], proc[:uid], proc[:gid], proc[:state]]
+    Curses.setpos(index, 0)
+    Curses.addstr(output)
+    index += 1
+  end
+  Curses.refresh
 end
 
 def tasks_stats(processes)
@@ -74,10 +111,9 @@ def tasks_stats(processes)
   sleeping_count = processes.count { |proc| proc[:state] == 'S' }
   stopped_count = processes.count { |proc| proc[:state] == 'T' }
   zombie_count = processes.count { |proc| proc[:state] == 'Z' }
-  output = "Tasks: #{tot_count} total,  #{running_count} running, #{sleeping_count} sleeping, #{stopped_count} stopped, #{zombie_count} zombie"
-  Curses.setpos(5, 0)
-  Curses.addstr(output)
-  Curses.refresh
+  bold_text 5, 0, 'Tasks:'
+  output = " #{tot_count} total,  #{running_count} running, #{sleeping_count} sleeping, #{stopped_count} stopped, #{zombie_count} zombie"
+  print_text 5, 10, output
 end
 
 def cpu_usage_to_percentages(old_usage, new_usage)
@@ -89,13 +125,12 @@ def cpu_usage_to_percentages(old_usage, new_usage)
   usage.map! do |usg|
     ((usg / cpu_tot) * 100).round 2
   end
-  output = "CPU Usage%:\t"
+  bold_text 4, 0, "CPU Usage%:\t"
+  output = ''
   usage.zip(val_array).each do |usg, des|
     output += "#{'%8s' % usg}#{'%3s' % des}"
   end
-  Curses.setpos(4, 0)
-  Curses.addstr(output)
-  Curses.refresh
+  print_text 4, 10, output
 end
 
 def cpu_stat_read
@@ -114,9 +149,6 @@ def cpu_usage
 end
 
 def let_it_burn(threads)
-  Curses.setpos(50, 50)
-  Curses.addstr('Burning it ALL!')
-  Curses.refresh
   threads.each do |t|
     Thread.kill t
   end
