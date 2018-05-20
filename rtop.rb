@@ -8,7 +8,9 @@ class Rtop
     Curses.curs_set 0
     Curses.init_screen
     @status_window = Curses::Window.new(20, Curses.cols, 0, 0)
-    @process_window = Curses::Window.new(100, Curses.cols, 10, 0)
+    @process_window = Curses::Window.new(100, Curses.cols, 7, 0)
+    Curses.stdscr.keypad true
+    Curses.stdscr.nodelay = true
     @process_window.scrollok true
   end
 
@@ -70,7 +72,9 @@ class Rtop
   end
 
   def parse_process_status(dir)
-    content = File.new("/proc/#{dir}/status").read
+    begin
+      content = File.new("/proc/#{dir}/status").read
+    rescue; end
     regex_list = { name: /Name.*/, state: /State:.*/, pid: /Pid:.*/,
                    uid: /Uid:.*/, gid: /Gid:.*/, threads: /Threads:.*/ }
     process = {}
@@ -100,14 +104,13 @@ class Rtop
 
   def process_list
     process_header = '%8s%20s%8s%8s%8s' % %w[PID Name UID GID State]
-    bold_text 6, 0, process_header, @status_window
+    bold_text 0, 0, process_header, @process_window
     index = 1
-    @processes.each do |proc|
+    @processes[@process_index..@process_window.maxy].each do |proc|
       output = '%8s%20s%8s%8s%8s' % [proc[:pid], proc[:name], proc[:uid], proc[:gid], proc[:state]]
       @process_window.setpos(index, 0)
       @process_window.addstr(output)
       index += 1
-      @process_window.addstr("\n") if (@process_window.cury + 1) == @process_window.maxy
     end
     @process_window.refresh
   end
@@ -151,7 +154,7 @@ class Rtop
       new_usage = cpu_stat_read
       cpu_usage_to_percentages old_usage, new_usage
       old_usage = new_usage
-      sleep 2
+      sleep 1
     end
   end
 
@@ -183,14 +186,13 @@ class Rtop
     @threads << Thread.new do
       loop do
         gen_process_list
-        sleep 1
+        sleep 0.1
       end
     end
 
     @threads << Thread.new do
       loop do
         key_press_detection
-        sleep 1
       end
     end
     @threads.each(&:join)
@@ -206,9 +208,14 @@ class Rtop
   def key_press_detection
     check = Curses.getch
     let_it_burn if check == 'q'
+    @process_index += 1 if check == Curses::Key::DOWN && @process_index < @processes.length
+    @process_index -= 1 if check == Curses::Key::UP && @process_index > 0
   end
 
   def initialize
+    @process_index = 0
+    @users = []
+    @processes = []
     curses_init
     thread_init
   end
